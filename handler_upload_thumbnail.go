@@ -68,8 +68,6 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	videoThumbnails[videoID] = thumbnail{data: byteData, mediaType: contentType}
-
 	stringData := base64.StdEncoding.EncodeToString(byteData)
 	dataUrl := "data:" + contentType + ";base64," + stringData
 
