@@ -34,6 +34,16 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	videoMetaData, err := cfg.db.GetVideo(videoID)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Unable to get meatdata for video id", err)
+		return
+	}
+	if videoMetaData.UserID != userID {
+		respondWithError(w, http.StatusUnauthorized, "User not the owner of the video", fmt.Errorf(""))
+		return
+	}
+
 	fmt.Println("uploading thumbnail for video", videoID, "by user", userID)
 
 	const maxMemory = 10 << 20
@@ -53,16 +63,6 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 	contentType := header.Header.Get("Content-Type")
 	if len(contentType) == 0 {
 		respondWithError(w, http.StatusBadRequest, "Content type not specified", err)
-		return
-	}
-
-	videoMetaData, err := cfg.db.GetVideo(videoID)
-	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Unable to get meatdata for video id", err)
-		return
-	}
-	if videoMetaData.UserID != userID {
-		respondWithError(w, http.StatusUnauthorized, "User not the owner of the video", fmt.Errorf(""))
 		return
 	}
 
