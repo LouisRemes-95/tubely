@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"mime"
@@ -64,13 +66,20 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	exts, _ := mime.ExtensionsByType(contentType)
-	ext := ".bin"
-	if len(exts) > 0 {
-		ext = exts[0]
+	mediaType, _, err := mime.ParseMediaType(contentType)
+
+	if mediaType != "image/jpeg" && mediaType != "image/png" {
+		respondWithError(w, http.StatusBadRequest, "Content type not and image", err)
+		return
 	}
 
-	assetFilePath := filepath.Join(cfg.assetsRoot, videoIDString+ext)
+	exts, _ := mime.ExtensionsByType(mediaType)
+
+	randomByteSlice := make([]byte, 32)
+	rand.Read(randomByteSlice)
+	randomString := base64.RawURLEncoding.EncodeToString(randomByteSlice)
+
+	assetFilePath := filepath.Join(cfg.assetsRoot, randomString+exts[0])
 	assetFile, err := os.Create(assetFilePath)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Unable to create asset file", err)
