@@ -1,13 +1,17 @@
 package main
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"mime"
 	"net/http"
 	"os"
+	"os/exec"
 
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/auth"
@@ -95,10 +99,16 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	aspectRatio, err := getVideoAspectRatio(tempFile.Name())
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "Unable to get aspect ratio of video", err)
+		return
+	}
+
 	exts, _ := mime.ExtensionsByType(mediaType)
 	randomByteSlice := make([]byte, 32)
 	rand.Read(randomByteSlice)
-	key := base64.RawURLEncoding.EncodeToString(randomByteSlice) + exts[0]
+	key := aspectRatio + "/" + base64.RawURLEncoding.EncodeToString(randomByteSlice) + exts[0]
 	putObjetInput := s3.PutObjectInput{
 		Bucket:      &cfg.s3Bucket,
 		Key:         &key,
@@ -126,4 +136,40 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 	}
 
 	respondWithJSON(w, http.StatusOK, videoMetaData)
+}
+
+func getVideoAspectRatio(filePath string) (string, error) {
+	cmd := exec.Command("ffprobe", "-v", "error", "-print_format", "json", "-show_streams", filePath)
+	var buf bytes.Buffer
+	cmd.Stdout = &buf
+	err := cmd.Run()
+	if err != nil {
+		return "", fmt.Errorf("failed to run command: %w", err)
+	}
+
+	var stdOut struct {
+		Streams []struct {
+			Width  *int `json:"width"`
+			Height *int `json:"height"`
+		} `json:"streams"`
+	}
+
+	err = json.Unmarshal(buf.Bytes(), &stdOut)
+	if err != nil {
+		return "", fmt.Errorf("failed to unmarshal buffer: %w", err)
+	}
+
+	if stdOut.Streams[0].Width == nil || stdOut.Streams[0].Height == nil {
+		return "", fmt.Errorf("width and Height not given: %w", err)
+	}
+
+	const tol = 1e-2
+	switch {
+	case math.Abs(float64(*stdOut.Streams[0].Width)/float64(*stdOut.Streams[0].Height)-16.0/9.0) < tol:
+		return "landscape", nil
+	case math.Abs(float64(*stdOut.Streams[0].Width)/float64(*stdOut.Streams[0].Height)-9.0/16.0) < tol:
+		return "portrait", nil
+	default:
+		return "other", nil
+	}
 }
