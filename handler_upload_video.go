@@ -105,6 +105,20 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	fastStartFilePath, err := processVideoForFastStart(tempFile.Name())
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Unable to process the video file to fast start", err)
+		return
+	}
+
+	fastStartPath, err := os.Open(fastStartFilePath)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Unable to open fast start file", err)
+		return
+	}
+	defer os.Remove(fastStartPath.Name())
+	defer fastStartPath.Close()
+
 	exts, _ := mime.ExtensionsByType(mediaType)
 	randomByteSlice := make([]byte, 32)
 	rand.Read(randomByteSlice)
@@ -112,7 +126,7 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 	putObjetInput := s3.PutObjectInput{
 		Bucket:      &cfg.s3Bucket,
 		Key:         &key,
-		Body:        tempFile,
+		Body:        fastStartPath,
 		ContentType: &mediaType,
 	}
 	_, err = cfg.s3Client.PutObject(r.Context(), &putObjetInput)
